@@ -1,0 +1,38 @@
+# Compiled Object Files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic Libraries
+*.so*
+*.so.1*
+
+# Compiled Static Libraries
+*.lai
+*.la
+*.a
+
+# Ignored Files
+*.ignore
+
+# Backup Files
+*~
+
+# Unsaved Files
+*#
+.#*
+
+# Text Files
+*.txt
+
+# Dependency Files
+*.dep
+
+# Sprite Development Files
+*.xcf
+
+# Executable Files
+*.exe
+
+# Kate Project Files
+*.kateproject
