@@ -36,3 +36,6 @@
 
 # Kate Project Files
 *.kateproject
+
+# Doxygen Configuration File
+documentation/*
