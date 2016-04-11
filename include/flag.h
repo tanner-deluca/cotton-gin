@@ -2,21 +2,24 @@
 
 
 /**
- * @flag.h
+ * @file flag.h
  * 
- * The flag type is using individual bits for use as boolean values.
- * Bits can be checked, set, removed, and toggled.
+ * @brief A file for controlling bit flags.
+ * 
+ * @note The flag type for using individual bits as boolean values.
+ * @note Bits can be checked, set, removed, and toggled.
+ * @note The macros work with any integer type.
  */
 
 
-/**
- * the flag data type
- */
-typedef unsigned int flag;
+typedef unsigned char	flag8;	/**< the 8 bit flag type which holds 8 flags */
+typedef unsigned short	flag16;	/**< the 16 bit flag type which holds 16 flags */
+typedef unsigned int	flag32;	/**< the 32 bit flag type which holds 32 flags */
+typedef unsigned long	flag64;	/**< the 64 bit flag type which holds 64 flags */
 
 
 /**
- * @brief checks if a bit is set a flag
+ * @brief A macro to check if a bit in a flag is set.
  * 
  * @param flag the flag to use
  * @param bit the bit to check
@@ -26,7 +29,7 @@ typedef unsigned int flag;
 #define check_bit( flag, bit )	( flag & bit )
 
 /**
- * @brief sets a bit to 1 in a flag
+ * @brief A macro to set a bit in a flag.
  * 
  * @param flag the flag to use
  * @param bit the bit to set
@@ -34,7 +37,7 @@ typedef unsigned int flag;
 #define set_bit( flag, bit )	( flag |= bit )
 
 /**
- * @brief sets a bit to 0 in a flag
+ * @brief A macro to remove a bit from a flag.
  * 
  * @param flag the flag to use
  * @param bit the bit to remove
@@ -42,7 +45,7 @@ typedef unsigned int flag;
 #define remove_bit( flag, bit )	( flag &= ~bit )
 
 /**
- * @brief toggles between a bit being 1 and 0
+ * @brief A macro to toggle a bit in a flag.
  * 
  * @param flag the flag to use
  * @param bit the bit to toggle

@@ -2,6 +2,7 @@
 #include <chrono>
 #include <iostream>
 
+
 #include "gin_logger.h"
 
 
@@ -9,180 +10,255 @@
 #include <bitset>
 #endif
 
+
 using namespace std;
 
 
 /* logging flags */
-#define LOGGER_STOPPED		0
 #define LOGGER_RUNNING		1
-#define LOGGER_WRITING		2
-#define LOGGER_STOPPING		4
+#define LOGGER_STOPPING		2
+#define LOGGER_WRITING		4
 #define LOGGER_PAUSED		8
 #define LOGGER_CMD_LINE		16
-#define LOGGER_INITIALIZED	32
+#define LOGGER_FILE_SET		32
+#define LOGGER_FAILURE		64
 
-
-ginLogger::ginLogger( string log_file_name )
-{
-#ifdef GIN_LOGGER_DEBUG
-  cout << "logger constructor start debug\n" << log_file_name << "\ndone\n\n";
-#endif
-  
-  log_file.open( log_file_name );
-  if( !log_file.is_open() )
-    return;
-  
-  this->log_file_name = log_file_name;
-  flags = 0;
-  
-  set_bit( flags, LOGGER_INITIALIZED );
-  
-#ifdef GIN_LOGGER_DEBUG
-  bitset<32> bits( flags );
-  cout << "logger constructor end debug\n" << this->log_file_name << "\n" << "flags::" << bits << "\ndone\n\n";
-#endif
-}
 
 ginLogger::~ginLogger()
 {
 #ifdef GIN_LOGGER_DEBUG
-  cout << "logger destructor start debug\n\n";
-#endif
-    
+  cout << "ginLogger destructor called\n";
+#endif 
+  
   stop();
   log_file.close();
-  
-#ifdef GIN_LOGGER_DEBUG
-  cout << "logger destructor end debug\n\n";
-#endif
 }
 
-
-bool ginLogger::initialized()
+bool ginLogger::set_log_file( string log_file_name )
 {
-  if( check_bit( flags, LOGGER_INITIALIZED ) )
-  {
-
 #ifdef GIN_LOGGER_DEBUG
-    cout << "logger initialized debug\n" << "true\ndone\n\n";
-#endif
+  cout << "ginLogger set_log_file called\n";
+#endif 
   
-    return true;
+  /* check if a file is already opened */
+  if( log_file.is_open() )
+  {
+    if( check_bit( flags, LOGGER_RUNNING ) )
+      return runtime_file_change( log_file_name );
+    else
+      log_file.close();
   }
   
-#ifdef GIN_LOGGER_DEBUG
-  cout << "logger initialized debug\n" << "false\ndone\n\n";
-#endif
- 
-  return false;
+  log_file.open( log_file_name );
+  if( !log_file.is_open() )
+    return false;
+  
+  this->log_file_name = log_file_name;
+  
+  return true;
 }
 
 
-void ginLogger::enable_cmd_line()
+bool ginLogger::runtime_file_change( string log_file_name )
 {
-  set_bit( flags, LOGGER_CMD_LINE );
+  /* temporarily pause the logger */
+  set_bit( flags, LOGGER_PAUSED );
+   
+  /* the log_file can be changed once the logger is finished writing */
+  while( check_bit( flags, LOGGER_WRITING ) )
+  {
+    this_thread::sleep_for( chrono::milliseconds( 3 ) );
+  }
   
-#ifdef GIN_LOGGER_DEBUG
-  bitset<32> bits( flags );
-  cout << "logger enable_cmd_line debug\n" << "flags::" << bits << "\ndone\n\n";
-#endif
-}
-
-
-void ginLogger::disable_cmd_line()
-{
-  remove_bit( flags, LOGGER_CMD_LINE );
+  log_file.close();
+  log_file.open( log_file_name );
+  if( !log_file.is_open() )
+  {
+    /* stop the logger if the log_file is broken */
+    set_bit( flags, LOGGER_FAILURE );
+    stop();
+    remove_bit( flags, LOGGER_PAUSED );
+    remove_bit( flags, LOGGER_FAILURE );
+    
+    return false;
+  }
   
-#ifdef GIN_LOGGER_DEBUG
-  bitset<32> bits( flags );
-  cout << "logger disable_cmd_line debug\n" << "flags::" << bits << "\ndone\n\n";
-#endif
+  this->log_file_name = log_file_name;
+  remove_bit( flags, LOGGER_PAUSED );
+  
+  return true;
 }
 
 
 string ginLogger::get_log_file()
 {
 #ifdef GIN_LOGGER_DEBUG
-  cout << "logger get_log_file debug\n" << log_file_name << "\ndone\n\n";
-#endif
-
+  cout << "ginLogger get_log_file called\n";
+#endif 
+  
   return log_file_name;
 }
 
 
-bool ginLogger::start()
+void ginLogger::enable_cmd_line()
 {
-  if( check_bit( flags, LOGGER_RUNNING ) )
-    return false;
-  else
-    set_bit( flags, LOGGER_RUNNING );
-  
-  log_queue = g_async_queue_new();
-  if( !log_queue )
-    return false;
-  
-  log_thread = thread( [ this ] { run(); } );
-  log_thread.detach();
-  
 #ifdef GIN_LOGGER_DEBUG
-  bitset<32> bits( flags );
-  cout << "logger start debug\n" << "flags::" << bits << "\ndone\n\n";
-#endif
+  cout << "ginLogger enable_cmd_line called\n";
+#endif 
   
-  return true;
+  set_bit( flags, LOGGER_CMD_LINE );
 }
 
 
-void ginLogger::stop()
-{ 
-  set_bit( flags, LOGGER_STOPPING );
-  
-  while( check_bit( flags, LOGGER_RUNNING ) )
-  {
-    this_thread::sleep_for( chrono::milliseconds( 10 ) );
-  }
-  
-  empty_queue();
-  g_async_queue_unref( log_queue );
-  log_queue = NULL;
-  
+void ginLogger::disable_cmd_line()
+{
 #ifdef GIN_LOGGER_DEBUG
-  bitset<32> bits( flags );
-  cout << "logger stop debug\n" << "flags::" << bits << "\ndone\n\n";
-#endif
+  cout << "ginLogger disable_cmd_line called\n";
+#endif 
+  
+  remove_bit( flags, LOGGER_CMD_LINE );
 }
 
 
 void ginLogger::pause()
 {
-  set_bit( flags, LOGGER_PAUSED );
-  
 #ifdef GIN_LOGGER_DEBUG
-  bitset<32> bits( flags );
-  cout << "logger paused debug\n" << "flags::" << bits << "\ndone\n\n";
-#endif
+  cout << "ginLogger pause called\n";
+#endif 
+  
+  set_bit( flags, LOGGER_PAUSED );
 }
 
 
 void ginLogger::resume()
 {
-  remove_bit( flags, LOGGER_PAUSED );
-  
 #ifdef GIN_LOGGER_DEBUG
-  bitset<32> bits( flags );
-  cout << "logger resume debug\n" << "flags::" << bits << "\ndone\n\n";
+  cout << "ginLogger resume called\n";
+#endif 
+  
+  remove_bit( flags, LOGGER_PAUSED );
+}
+
+
+bool ginLogger::start()
+{
+#ifdef GIN_LOGGER_DEBUG
+  cout << "ginLogger start called\n";
+#endif 
+  
+  /* don't start an already started logger */
+  if( run_lock.try_lock() )
+  {
+    log_queue = g_async_queue_new();
+    if( !log_queue )
+    {
+      run_lock.unlock();
+      return false;
+    }
+    
+    set_bit( flags, LOGGER_RUNNING );
+    log_thread = thread( [ this ] { run(); } );
+    log_thread.detach();
+    
+    return true;
+  }
+  else
+    return false;
+}
+
+
+void ginLogger::stop()
+{ 
+#ifdef GIN_LOGGER_DEBUG
+  cout << "ginLogger stop called\n";
+#endif 
+  
+  /* don't stop what hasn't started or is already stopping */
+  if( !check_bit( flags, LOGGER_RUNNING ) || check_bit( flags, LOGGER_STOPPING ) )
+    return;
+  
+  set_bit( flags, LOGGER_STOPPING );
+  
+  /* wait for the logger to finish up */
+  while( check_bit( flags, LOGGER_RUNNING ) )
+  {
+    this_thread::sleep_for( chrono::milliseconds( 3 ) );
+  }
+  
+  g_async_queue_unref( log_queue );
+  log_queue = NULL;
+  remove_bit( flags, LOGGER_STOPPING );
+}
+
+
+void ginLogger::run()
+{
+#ifdef GIN_LOGGER_DEBUG
+  cout << "ginLogger run called\n";
+#endif  
+  
+  while( !check_bit( flags, LOGGER_STOPPING ) )
+  {
+    if( !check_bit( flags, LOGGER_PAUSED ) )
+      empty_queue();
+  }
+  
+  /* make sure everything is logged */
+  if( !check_bit( flags, LOGGER_FAILURE ) )
+    empty_queue();
+  remove_bit( flags, LOGGER_RUNNING );
+  run_lock.unlock();
+}
+
+
+bool ginLogger::is_running()
+{
+#ifdef GIN_LOGGER_DEBUG
+  cout << "ginLogger is_running called\n";
 #endif
+  
+  if( check_bit( flags, LOGGER_RUNNING ) && !check_bit( flags, LOGGER_STOPPING ) )
+    return true;
+  
+  return false;
+}
+
+
+void ginLogger::empty_queue()
+{
+#ifdef GIN_LOGGER_DEBUG
+  cout << "ginLogger empty_queue called\n";
+#endif  
+  
+  set_bit( flags, LOGGER_WRITING );
+  
+  string *msg;
+  
+  while( g_async_queue_length( log_queue ) > 0 )
+  {
+    msg = ( string * )( g_async_queue_pop( log_queue ) );
+    if( !msg )
+      break;
+    
+    log_file << *msg << "\n";
+    if( check_bit( flags, LOGGER_CMD_LINE ) )
+      cout << *msg << "\n";
+    
+    delete( msg );
+    msg = NULL;
+  }
+  
+  remove_bit( flags, LOGGER_WRITING );
 }
 
 
 bool ginLogger::log_message( string file, int line, string log_level, string message )
 {
 #ifdef GIN_LOGGER_DEBUG
-  cout << "logger log_message start debug\n" << file << "\n" << to_string( line ) << "\n" << \
-  log_level << "\n" << message << "\ndone\n\n";
-#endif
+  cout << "ginLogger log_message called\n";
+#endif 
   
-  if( !check_bit( flags, LOGGER_RUNNING ) )
+  if( !check_bit( flags, LOGGER_RUNNING ) && check_bit( flags, LOGGER_STOPPING ) )
     return false;
   
   string *msg;
@@ -196,59 +272,8 @@ bool ginLogger::log_message( string file, int line, string log_level, string mes
   msg->append( message );
   
   g_async_queue_push( log_queue, msg );
-
-#ifdef GIN_LOGGER_DEBUG
-  cout << "logger log_message end debug\n" << *msg << "\ndone\n\n";
-#endif
   
   return true;
-}
-
-
-void ginLogger::empty_queue()
-{
-#ifdef GIN_LOGGER_DEBUG
-  cout << "logger empty_queue start debug\n\n";
-#endif  
-  
-  string *msg;
-  
-  while( g_async_queue_length( log_queue ) > 0 )
-  {
-    msg = ( string * )( g_async_queue_pop( log_queue ) );
-    if( !msg )
-      break;
-    
-    set_bit( flags, LOGGER_WRITING );
-    log_file << *msg << "\n";
-    if( check_bit( flags, LOGGER_CMD_LINE ) )
-      cout << *msg << "\n";
-    
-    delete( msg );
-    msg = NULL;
-    remove_bit( flags, LOGGER_WRITING );
-  }
-  
-#ifdef GIN_LOGGER_DEBUG
-  cout << "logger empty_queue end debug\n\n";
-#endif 
-}
-
-
-void ginLogger::run()
-{
-#ifdef GIN_LOGGER_DEBUG
-  cout << "logger running\n\n";
-#endif  
-  
-  while( !check_bit( flags, LOGGER_STOPPING ) )
-  {
-    if( !check_bit( flags, LOGGER_PAUSED ) )
-      empty_queue();
-  }
-  
-  remove_bit( flags, LOGGER_STOPPING );
-  remove_bit( flags, LOGGER_RUNNING );
 }
 
 

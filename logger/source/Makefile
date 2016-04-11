@@ -31,7 +31,7 @@ MINOR = 0.1
 CC = g++
 
 # includes
-INCLUDE_PATHS = ../include ../../general
+INCLUDE_PATHS = ../include ../../include
 INCLUDE_PARAMETERS = $(foreach d, $(INCLUDE_PATHS), -I$d)
 
 # compiler flags
