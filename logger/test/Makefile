@@ -29,7 +29,7 @@ PROJECT = test_logger.exe
 CC = g++
 
 # includes
-INCLUDE_PATHS = ../include ../../general
+INCLUDE_PATHS = ../../include
 INCLUDE_PARAMETERS = $(foreach d, $(INCLUDE_PATHS), -I$d)
 
 # cotton gin libraries

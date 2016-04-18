@@ -16,7 +16,7 @@
  * @brief A file that contains classes, macros, and defines for logging messages to files in a multi-threaded environment.
  */
 
-//#define GIN_LOGGER_DEBUG
+#define GIN_LOGGER_DEBUG
 
 
 /**
@@ -28,16 +28,22 @@ class ginLogger
   public:
   
   private:
-    volatile flag8	flags;		/**< holds all of the flags that are used to control the logger */
+    flag8		flags;		/**< holds all of the flags that are used to control the logger */
     GAsyncQueue		*log_queue;	/**< holds all the pending messages to log */
     std::string		log_file_name;	/**< the name of the file to log to */
     std::ofstream	log_file;	/**< the file to write to */
     std::thread		log_thread;	/**< the thread the logger is using */
-    std::mutex		run_lock;	/**< the lock that prevents a user from starting a running logger */
-
+    std::mutex		start_lock;	/**< the lock that prevents a user from starting a running logger */
+    std::mutex		write_lock;	/**< the lock that prevents writing from occuring */
+    std::mutex		run_lock;	/**< a lock that prevents running */
   
   /* functions */
   public:
+    /**
+     * @brief The ginLogger constructor.
+     */
+    ginLogger();
+    
     /**
      * @brief The ginLogger destructor.
      * 
@@ -57,20 +63,20 @@ class ginLogger
     bool set_log_file( std::string log_file_name );
     
     /**
+     * @brief The function to view the current logging flags.
+     *
+     * @return the logging flags 
+     */
+    flag8 get_flags();
+    
+    /**
      * @brief The function to start the logging process.
      *
      * @return true on success, false if else
      * 
-     * @note False is returned when called by a logger that is already running.
+     * @note False is returned when called by a logger that is already running or if no log file is set.
      */
     bool start();
-    
-    /**
-     * @brief The function to check if a logger is running.
-     * 
-     * @return true is the logger is running, false if else
-     */
-    bool is_running();
     
     /**
      * @brief The function to stop the logging process.
@@ -112,11 +118,9 @@ class ginLogger
      * @param log_level the log level to write to
      * @param message the message to write
      * 
-     * @return true on success, false if trying to write to non-running logger
-     * 
-     * @note messages will appear in the following format,\nlog_level::file::line\nmessage
+     * @note messages will appear in the following format,\ntimestamp\nlog_level::file::line\nmessage
      */
-    bool log_message( std::string file, int line,  std::string log_level, std::string message );
+    void log( std::string file, int line,  std::string log_level, std::string message );
     
   private:
     /**
@@ -125,13 +129,9 @@ class ginLogger
     void empty_queue();
     
     /**
-     * @brief The function that handles the changing of log files during runtime.
-     * 
-     * @param log_file_name the name of the new file to log to
-     * 
-     * @return true on success, false if else
+     * @brief The function to dump the queue in case of an emergency.
      */
-    bool runtime_file_change( std::string log_file_name );
+    void delete_queue();
     
     /**
      * @brief The logging thread function.
@@ -139,6 +139,27 @@ class ginLogger
     void run();
 };
 
+
+/* logger flags */
+/**
+ * flag that states the logger is running
+ */
+#define LOGGER_RUNNING		1
+
+/**
+ * flag that states the log file is set
+ */
+#define LOGGER_FILE_SET		2
+
+/**
+ * flag that states the logger is paused
+ */
+#define LOGGER_PAUSED		4
+
+/**
+ * flag that states the logger is also printing to the command line
+ */
+#define LOGGER_CMD_LINE		8
 
 /* standard logging levels */
 /**
@@ -167,10 +188,6 @@ class ginLogger
 #define LOG_INFO	"INFO LOG"
 
 
-/**
- * @brief an ease of use macro that automatically puts in the file and line into a log message
- */
-#define log( level, message )	( log_message( __FILE__, __LINE__, level, message ) )
-
+#define FILE_AND_LINE	__FILE__,__LINE__
 
 /* eof */

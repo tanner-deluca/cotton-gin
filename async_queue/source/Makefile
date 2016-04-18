@@ -18,7 +18,7 @@ OBJECTS = $(patsubst %.cpp,%.o,$(wildcard *.cpp))
 
 PROJECT_LIBRARY = cotton_gin
 PROJECT_LIBRARY_PATH = ../../libs
-PROJECT = logger
+PROJECT = async_queue
 MAJOR = 1
 MINOR = 0.1
 
@@ -35,9 +35,6 @@ INCLUDE_PATHS = ../../include
 INCLUDE_PARAMETERS = $(foreach d, $(INCLUDE_PATHS), -I$d)
 
 # compiler flags
-GLIB_CFLAGS = `pkg-config --cflags glib-2.0`
-GLIB_LDFLAGS = `pkg-config --libs glib-2.0`
-
 LFLAGS = -g -shared -Wl,-soname,$(PROJECT_LIBRARY)_$(PROJECT).so.$(MAJOR) -o $(PROJECT_LIBRARY_PATH)/$(PROJECT_LIBRARY)_$(PROJECT).so.$(MAJOR).$(MINOR)
 CPPFLAGS = -g -std=c++11 -fPIC -Wall -pedantic -Wno-unknown-pragmas -Wno-variadic-macro $(INCLUDE_PARAMETERS) $(GLIB_CFLAGS)
 
@@ -47,7 +44,7 @@ CPPFLAGS = -g -std=c++11 -fPIC -Wall -pedantic -Wno-unknown-pragmas -Wno-variadi
 #
 
 $(PROJECT): $(OBJECTS)
-	$(CC) $(OBJECTS) $(LFLAGS) $(GLIB_LDFLAGS)
+	$(CC) $(OBJECTS) $(LFLAGS)
 
 
 #
