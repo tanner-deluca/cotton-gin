@@ -9,6 +9,8 @@
 
 
 #include "flag.h"
+#include "gin_async_queue.h"
+
 
 /**
  * @file gin_logger.h

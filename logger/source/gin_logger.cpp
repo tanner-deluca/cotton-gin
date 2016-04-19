@@ -5,12 +5,12 @@
 
 
 #include "gin_logger.h"
-
+#include "gin_async_queue.h"
 
 #ifdef GIN_LOGGER_DEBUG
 #include <bitset>
 #endif
-
+ 
 
 using namespace std;
 
