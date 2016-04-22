@@ -11,179 +11,122 @@
 #include <queue>
 #include <mutex>
 
+#include "gin_std_types.h"
 
-/**< the thread safe queue template class */
-template <class queue_type>
+
+/**
+ * @brief the thread safe queue class 
+ * 
+ * @note one of the clear functions should be called before deleting
+ * 
+ */
 class gin_async_queue
 {
   /* variables */
   public:
     
   private:
-    std::queue<queue_type>	async_queue;	/**< the container for the elements */
+    std::queue<data_ptr>	async_queue;	/**< the container for the elements */
     std::mutex			queue_lock;	/**< the lock to prevent simultaneous accesses to the queue */
-    
+
+ 
   /* functions */
   public:
     /**
-     * @brief adds an element to the end of the queue
+     * @brief adds data onto the queue
      * 
-     * @param element the element to add
+     * @param element the data to add ( CANNOT be NULL )
      */
-    void push( queue_type element )
-    {
-      queue_lock.lock();
-      async_queue.push( element );
-      queue_lock.unlock();
-    }
-    
+    void push( data_ptr element );
     
     /**
-     * @brief attempts to add an element to the end of the queue
+     * @brief adds data onto the queue
      * 
-     * @param element the element to try to add
+     * @param element the data to add ( CANNOT be NULL )
      * 
-     * @return true on success, false if the queue is currently being used by another thread
+     * @note this function should only be called between lock() and unlock() calls
      */
-    bool try_push( queue_type element )
-    {
-      if( queue_lock.try_lock() )
-      {
-	async_queue.push( element );
-	queue_lock.unlock();
-	return true;
-      }
-      else
-	return false;
-    }
-    
+    void push_locked( data_ptr element );
     
     /**
-     * @brief removes the first element from the queue
+     * @brief removes the oldest element from the queue and returns it
+     * 
+     * @return the oldest element in the queue or NULL if the queue is empty
      */
-    void pop()
-    {
-      queue_lock.lock();
-      async_queue.pop();
-      queue_lock.unlock();
-    }
-    
+    data_ptr pop();
     
     /**
-     * @brief attempts to remove the first element from the queue
+     * @brief removes the oldest element from the queue and returns it
      * 
-     * @note will fail if the queue is currently being used by another thread
+     * @return the oldest element in the queue or NULL if the queue is empty
+     * 
+     * @note this function should only be called between lock() and unlock() calls
      */
-    void try_pop()
-    {
-      if( queue_lock.try_lock() )
-      {
-	async_queue.pop();
-	queue_lock.unlock();
-	return true;
-      }
-      else
-	return false;
-    }
-    
+    data_ptr pop_locked();
     
     /**
-     * @brief gets the first element in the queue
+     * @brief returns the number of elements in the queue
      * 
-     * @return the first element in the queue
+     * @return the number of elements that will potentially be in the queue
      * 
-     * @note do NOT use between is_empty() and is_empty_confirmation() calls
+     * @note actually returns the size + pending_pushes - pending_pops
      */
-    queue_type front()
-    {
-      queue_type element;
-      
-      queue_lock.lock();
-      element = async_queue.front();
-      queue_lock.unlock();
-    
-      return element;
-    }
-    
+    int size();
     
     /**
-     * @brief gets the first element in the queue without waiting for the queue_lock
+     * @brief returns the number of elements in the queue
      * 
-     * @return the first element in the queue
+     * @return the number of elements currently in the queue
      * 
-     * @note potentially dangerous if the first element is being pushed or popped at the same time as this call
-     * @note not dangerous between is_empty() and is_empty_confirmation() calls
+     * @note this function should only be called between lock() and unlock() calls
      */
-    queue_type quick_front()
-    {
-      return async_queue.front();
-    }
-    
+    int size_locked();
     
     /**
-     * @brief gets the number of elements in the queue
+     * @brief locks the queue
      * 
-     * @return the number of elements in the queue
-     * 
-     * @note do NOT use between is_empty() and is_empty_confirmation() calls
+     * @note while locked, you should only call the *_locked() function to prevent deadlock
      */
-    int size()
-    {
-      int length;
-      
-      queue_lock.lock();
-      length = async_queue.size();
-      queue_lock.unlock();
-      
-      return length;
-    }
-    
+    void lock();
     
     /**
-     * @brief gets the number of elements in the queue
+     * @brief unlocks the queue
      * 
-     * @return the number of elements in the queue
-     * 
-     * @note potentially inaccurate
-     * @note guaranteed accuracy between is_empty() and is_empty_confirmation() calls
+     * @note calling this function without having 1st called lock() may lead to undefined behavior
      */
-    int quick_size()
-    {
-      return async_queue.size();
-    }
-    
+    void unlock();
     
     /**
-     * @brief checks if there is anything in the queue
+     * @brief removes and deletes all elements of a special type in the queue
      *
-     * @return true if there isn't, false if there is
-     * 
-     * @note doesn't unlock the queue_lock to prevent the senario where this function returns true as the last element of the queue is popped, which would cause a crash
-     * @note need to call is_empty_confirmation() to use the queue again
-     * @note do NOT use between is_empty() and is_empty_confirmation() calls
+     * @param destroy a pointer to a function to free the elements in the queue ( CANNOT be NULL )
      */
-    bool is_empty()
-    {
-      bool empty;
-      
-      queue_lock.lock();
-      empty = async_queue.empty();
-      
-      return empty;
-    }
+    void clear_special( free_function destroy );
     
     /**
-     * @brief reenables the use of the queue after is_empty() is called
+     * @brief removes and deletes all elements in the queue
      * 
-     * @note do NOT call this before calling is_empty()
-     */ 
-    void is_empty_confirmation()
-    {
-      queue_lock.unlock();
-    }
-    
+     * @note use clear_special for elements that require a non-destructor free function
+     */
+    template< class type >
+    void clear( type t );
+
   private:
 };
+
+
+template< class type >
+void gin_async_queue::clear( type t)
+{
+  queue_lock.lock();
+  
+  while( !async_queue.empty() )
+  {
+    delete( ( type )( pop_locked() ) );
+  }
+  
+  queue_lock.unlock();
+}
 
 
 /* eof */

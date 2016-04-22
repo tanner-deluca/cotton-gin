@@ -23,8 +23,9 @@ typedef unsigned short	flag16;	/**< the 16 bit flag type which holds 16 flags */
 typedef unsigned int	flag32;	/**< the 32 bit flag type which holds 32 flags */
 typedef unsigned long	flag64;	/**< the 64 bit flag type which holds 64 flags */
 
-typedef void*		anything;	/**< a pointer to any type of data */
-typedef const void*	const_anything;	/**< a pointer to a constant of any type of data */
+typedef void*		data_ptr;	/**< a pointer to any type of data */
+typedef const void*	const_data_ptr;	/**< a pointer to a constant of any type of data */
 
+typedef void ( *free_function )( data_ptr data );	/**< a function pointer to a function to delete data */
 
 /* eof */
