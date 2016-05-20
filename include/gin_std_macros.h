@@ -52,7 +52,7 @@
 /* return macros */
 
 /**< returns a function if an expression succeeds */
-#define return_if_succ( expr )	\
+#define return_if_success( expr )	\
     GIN_STMT_START		\
     if( expr ) {return;};	\
     GIN_STMT_END
@@ -64,16 +64,16 @@
     GIN_STMT_END
 
 /**< returns a function with a value if an expression succeeds */
-#define return_val_if_succ( expr, value )	\
+#define return_value_if_success( expr, value )	\
     GIN_STMT_START				\
     if( expr ) {return value;};			\
     GIN_STMT_END
 
 /**< returns a function with a value if an expression fails */
-#define return_val_if_fail( expr, value )	\
+#define return_value_if_fail( expr, value )	\
     GIN_STMT_START				\
     if( !expr ) {return value;};		\
     GIN_STMT_END
 
-    
+
 /* eof */

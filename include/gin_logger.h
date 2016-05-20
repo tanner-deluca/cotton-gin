@@ -5,10 +5,10 @@
 #include <mutex>
 #include <fstream>
 #include <string>
-#include <glib.h>
 
 
-#include "flag.h"
+#include "gin_std_types.h"
+#include "gin_std_macros.h"
 #include "gin_async_queue.h"
 
 
@@ -22,174 +22,156 @@
 
 
 /**
- * The ginLogger is the class that is used for controlling the logging process.
+ * @brief an enumeration of all the logger exceptions
  */
-class ginLogger
+enum logger_exceptions
 {
-  /* variables */
-  public:
-  
-  private:
-    flag8		flags;		/**< holds all of the flags that are used to control the logger */
-    GAsyncQueue		*log_queue;	/**< holds all the pending messages to log */
-    std::string		log_file_name;	/**< the name of the file to log to */
-    std::ofstream	log_file;	/**< the file to write to */
-    std::thread		log_thread;	/**< the thread the logger is using */
-    std::mutex		start_lock;	/**< the lock that prevents a user from starting a running logger */
-    std::mutex		write_lock;	/**< the lock that prevents writing from occuring */
-    std::mutex		run_lock;	/**< a lock that prevents running */
-  
-  /* functions */
-  public:
-    /**
-     * @brief The ginLogger constructor.
-     */
-    ginLogger();
-    
-    /**
-     * @brief The ginLogger destructor.
-     * 
-     * @note It will stop the logger.
-     * @note It will close the log file.
-     */
-    ~ginLogger();
-    
-    /**
-     * @brief The function to set the file to log to
-     * 
-     * @param log_file_name the name of the file to log to
-     * 
-     * @note This function can be used during runtime.
-     * @note If the log file fails to open during runtime, the logger will be stopped.
-     */
-    bool set_log_file( std::string log_file_name );
-    
-    /**
-     * @brief The function to view the current logging flags.
-     *
-     * @return the logging flags 
-     */
-    flag8 get_flags();
-    
-    /**
-     * @brief The function to start the logging process.
-     *
-     * @return true on success, false if else
-     * 
-     * @note False is returned when called by a logger that is already running or if no log file is set.
-     */
-    bool start();
-    
-    /**
-     * @brief The function to stop the logging process.
-     */
-    void stop();
-    
-    /**
-     * @brief The function to pause the logging process.
-     */
-    void pause();
-    
-    /**
-     * @brief The function to resume the logging process.
-     */
-    void resume();
-    
-    /**
-     * @brief The function to enable the logger to write to the command line.
-     */
-    void enable_cmd_line();
-    
-    /**
-     * @brief The function to stop the logger from writing to the command line.
-     */
-    void disable_cmd_line();
-    
-    /**
-     * @brief The function to get the name of the file being logged to.
-     * 
-     * @return the name of the file being logged to
-     */
-    std::string get_log_file();
-    
-    /**
-     * @brief The function to add a message onto the log queue.
-     * 
-     * @param file the file name of the line that is calling the log_message function
-     * @param line the line number of the line that is calling the log_message function
-     * @param log_level the log level to write to
-     * @param message the message to write
-     * 
-     * @note messages will appear in the following format,\ntimestamp\nlog_level::file::line\nmessage
-     */
-    void log( std::string file, int line,  std::string log_level, std::string message );
-    
-  private:
-    /**
-     * @brief The function to write all messages in the log_queue to the log_file.
-     */
-    void empty_queue();
-    
-    /**
-     * @brief The function to dump the queue in case of an emergency.
-     */
-    void delete_queue();
-    
-    /**
-     * @brief The logging thread function.
-     */
-    void run();
+  LOGGER_CRASH_EXCEPTION = 1,
+  LOGGER_FILE_EXCEPTION,
+  LOGGER_START_EXCEPTION,
+  LOGGER_LOG_EXCEPTION
 };
 
 
-/* logger flags */
 /**
- * flag that states the logger is running
+ * an enumeration of all the logger flags
  */
-#define LOGGER_RUNNING		1
+enum logger_flags
+{
+  LOGGER_SET = 1,
+  LOGGER_RUNNING = 2,
+  LOGGER_PAUSED = 4,
+  LOGGER_CMD_LINE = 8
+};
 
-/**
- * flag that states the log file is set
- */
-#define LOGGER_FILE_SET		2
-
-/**
- * flag that states the logger is paused
- */
-#define LOGGER_PAUSED		4
 
 /**
- * flag that states the logger is also printing to the command line
+ * The gin_logger is a class for logging messages to files and the command line in a multi-threaded environment.
  */
-#define LOGGER_CMD_LINE		8
+class gin_logger
+{
+  /* variables */
+public:
+  
+private:
+  flag8					flags;			/**< the flags the show the status of the logger */
+  
+  uint32				log_rate;		/**< how often the logger loops ( in ms ) */
+  std::string				log_file_name;		/**< the name of the file to log to */
+  std::ofstream				*log_file_stream;	/**< the file stream to write to */
+  gin_async_queue< std::string >	log_queue;		/**< the queue to hold pending messages */
+  std::thread				log_thread;		/**< the thread that the logger runs on */
+  
+  std::mutex				start_lock;		/**< prevents the logger from starting */
+  std::mutex				run_lock;		/**< prevents the logger from running */
+  std::mutex				empty_lock;		/**< prevents the logger from writing */
+ 
+  
+  /* functions */
+public:
+  /**
+   * @brief initializes the logger
+   * 
+   * @param log_file the file to log to
+   * @param rate the log rate
+   * 
+   * @exception LOGGER_FILE_EXCEPTION integer exception thrown when the log_file fails to open 
+   */
+  gin_logger( std::string log_file, uint32 rate );
+  
+  /**
+   * @brief destroys the logger
+   * 
+   * @note finishes logging the remaining messages in the queue before deleting
+   */
+  ~gin_logger();
+  
+  /**
+   * @brief changes the file to log to
+   * 
+   * @param new_file the new file to log to
+   * 
+   * @note can be used while the logger is running
+   * 
+   * @exception LOGGER_FILE_EXCEPTION thrown when the new_file fails to open and will stop the logger
+   */
+  void change_log_file( std::string new_file );
+  
+  /**
+   * @brief starts the logger
+   * 
+   * @exception LOGGER_FILE_EXCEPTION thrown when trying to start the logger without a log file set
+   * @exception LOGGER_START_EXCEPTION thrown when trying to start the logger when it is already running
+   */
+  void start();
+  
+  /**
+   * @brief stops the logger 
+   * 
+   * @note finishes logging the remaining messages
+   */
+  void stop();
+  
+  /**
+   * @brief pauses the logger
+   * 
+   * @note messages can still be added while paused
+   */
+  void pause();
+  
+  /**
+   * @brief resumes the logger
+   */
+  void resume();
+  
+  /**
+   * @brief enables the logger to write the log messages to the command line as well as the log file
+   * 
+   * @note disabled by default
+   */
+  void enable_cmd_line();
+  
+  /**
+   * @brief prevents the logger from writing to the command line
+   */
+  void disable_cmd_line();
+  
+  /**
+   * @brief returns the current logging flags
+   */
+  flag8 get_status();
+  
+  /**
+   * @brief returns the name of the log file
+   */
+  std::string get_log_file();
+  
+  /**
+   * @brief adds a message to the log queue
+   * 
+   * @param file the file name of the line that is calling the log_message function
+   * @param line the line number of the line that is calling the log_message function
+   * @param log_type the type of log to write ( i.e. FATAL, ERROR, WARNING, TRACE, INFO )
+   * @param message the message to write
+   * 
+   * @note messages will have a timestamp of when they were logged
+   * @note messages will appear in the following format:\ntimestamp::log_type::file::line\nmessage
+   * 
+   * @exception LOGGER_START_EXCEPTION thrown when trying to write a message before the logger has started
+   */
+  void log( std::string file, int line, std::string log_type, std::string message );
+  
+private:
+  /**
+   * @brief the thread function that continously loops and write messages
+   */
+  void run();
+  
+  /**
+   * @brief writes all the messages in the log queue to the log file
+   */
+  void empty_queue();
+};
 
-/* standard logging levels */
-/**
- * log level for fatal errors
- */
-#define LOG_FATAL	"FATAL LOG"
-
-/**
- * log level for non-fatal errors
- */
-#define LOG_ERROR	"ERROR LOG"
-
-/**
- * log level for warning messages
- */
-#define LOG_WARN	"WARNING LOG"
-
-/**
- * log level for tracing messages
- */
-#define LOG_TRACE	"TRACE LOG"
-
-/**
- * log level for miscellaneous information
- */
-#define LOG_INFO	"INFO LOG"
-
-
-#define FILE_AND_LINE	__FILE__,__LINE__
 
 /* eof */

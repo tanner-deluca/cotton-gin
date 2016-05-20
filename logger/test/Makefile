@@ -40,7 +40,7 @@ LIBRARY_PARAMETERS = $(foreach d, $(GIN_LIBRARIES), $(PROJECT_LIBRARY_PATH)/$d)
 GLIB_CFLAGS = `pkg-config --cflags glib-2.0`
 GLIB_LDFLAGS = `pkg-config --libs glib-2.0`
 
-LFLAGS = -g -o $(PROJECT)
+LFLAGS = -g -o $(PROJECT) -pthread
 CPPFLAGS = -g $(INCLUDE_PARAMETERS) $(GLIB_CFLAGS) -Wall -pedantic -std=c++11 -Wno-unknown-pragmas -Wno-variadic-macros
 
 GIN_FLAGS = $(LIBRARY_PARAMETERS)
@@ -58,7 +58,7 @@ $(PROJECT): $(OBJECTS)
 #
 
 clean:
-	rm *.o $(PROJECT)
+	rm *.o *.txt $(PROJECT)
 
 
 #

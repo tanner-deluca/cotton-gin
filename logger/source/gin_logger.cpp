@@ -5,221 +5,193 @@
 
 
 #include "gin_logger.h"
-#include "gin_async_queue.h"
 
-#ifdef GIN_LOGGER_DEBUG
-#include <bitset>
-#endif
- 
 
 using namespace std;
 
 
-ginLogger::ginLogger()
+gin_logger::gin_logger( std::string log_file, uint32 rate )
 {
-  flags = 0;
-  log_queue = NULL;
-  log_file_name = "";
-}
-
-
-ginLogger::~ginLogger()
-{
-  stop();
-  log_file.close();
-}
-
-
-bool ginLogger::set_log_file( string log_file_name )
-{
-  write_lock.lock();
-  
-  if( log_file.is_open() )
-    log_file.close();
-  
-  log_file.open( log_file_name );
-  if( !log_file.is_open() )
-  {
-    stop();
-    remove_bit( flags, LOGGER_FILE_SET );
-    return false;
-  }
-  
-  this->log_file_name = log_file_name;
-  set_bit( flags, LOGGER_FILE_SET );
-  
-  write_lock.unlock();
-  
-  return true;
-}
-
-
-string ginLogger::get_log_file()
-{
-  return log_file_name;
-}
-
-
-void ginLogger::stop()
-{
-  cout << "stopping before run_lock\n";
   run_lock.lock();
   
-  cout << "stopping before log_queue check\n";
-  if( !log_queue )
-    return;
-
-  cout << "stopping\n";
-  if( check_bit( flags, LOGGER_FILE_SET ) )
-    empty_queue();
-  else
-    delete_queue();
+  log_rate = rate;
   
-  g_async_queue_unref( log_queue );
-  log_queue = NULL;
+  log_file_stream = new ofstream( log_file );
+  if( !log_file_stream->is_open() )
+  {
+    delete( log_file_stream );
+    log_file_stream = nullptr;
+    
+    throw LOGGER_FILE_EXCEPTION;
+  }
+  
+  log_file_name = log_file;
+  set_bit( flags, LOGGER_SET );
+}
+
+
+gin_logger::~gin_logger()
+{
+  stop();
+  
+  log_file_stream->close();
+  delete( log_file_stream );
+  
+  if( log_thread.joinable() )
+    log_thread.join();
+}
+
+
+void gin_logger::change_log_file( std::string new_file )
+{
+  ofstream *new_stream = new ofstream( new_file );
+  if( !new_stream->is_open() )
+  {
+    remove_bit( flags, LOGGER_SET );
+    delete( new_stream );
+    throw LOGGER_FILE_EXCEPTION;
+  }
+  
+  empty_lock.lock();
+  
+  if( log_file_stream )
+  {
+    log_file_stream->close();
+    delete( log_file_stream );
+  }
+  
+  log_file_stream = new_stream;
+  log_file_name = new_file;
+  set_bit( flags, LOGGER_SET );
+  
+  empty_lock.unlock();
+}
+
+
+void gin_logger::start()
+{
+  if( !log_file_stream )
+    throw LOGGER_FILE_EXCEPTION;
+  
+  if( start_lock.try_lock() )
+  {
+    run_lock.unlock();
+    empty_lock.unlock();
+    set_bit( flags, LOGGER_RUNNING );
+    log_thread = thread( [ this ] { run(); } );
+  }
+  else
+    throw LOGGER_START_EXCEPTION;
+}
+
+
+void gin_logger::stop()
+{
   remove_bit( flags, LOGGER_RUNNING );
+  
+  run_lock.lock();
+  
+  if( log_thread.joinable() )
+    log_thread.join();
+  
+  log_queue.clear();
   start_lock.unlock();
 }
 
 
-bool ginLogger::start()
+void gin_logger::run()
 {
-  if( !check_bit( flags, LOGGER_FILE_SET ) )
-    return false;
-  
-  if( start_lock.try_lock() )
-  {
-    log_queue = g_async_queue_new();
-    if( !log_queue )
-    {
-      start_lock.unlock();
-      return false;
-    }
-    
-    run_lock.unlock();
-    log_thread = thread( [ this ] { run(); } );
-    log_thread.detach();
-    set_bit( flags, LOGGER_RUNNING );
-    
-    return true;
-  }
-  else
-    return false;
-}
-
-
-void ginLogger::run()
-{
-  cout << "running\n";
-  
   while( run_lock.try_lock() )
   {
-    this_thread::sleep_for( chrono::milliseconds( 100 ) );
-    
     empty_queue();
     run_lock.unlock();
+    
+    this_thread::sleep_for( chrono::milliseconds( log_rate ) );
   }
-
-  remove_bit( flags, LOGGER_RUNNING );
-  cout << "run done\n";
+  
+  empty_queue();
 }
 
 
-void ginLogger::empty_queue()
+void gin_logger::empty_queue()
 {
-  static string *msg = NULL;
-  static int queue_length;
+  static string *message = nullptr;
   
-  if( write_lock.try_lock() )
-  { 
-    queue_length = g_async_queue_length( log_queue );
-    
-    while( queue_length > 0 )
+  if( empty_lock.try_lock() )
+  {
+    while( !log_queue.is_empty() )
     {
-      msg = ( string * )( g_async_queue_pop( log_queue ) );
-      if( !msg )
+      message = log_queue.pop();
+      if( !message )
 	break;
       
-      log_file << *msg << "\n";
+      *log_file_stream << *message << endl;
       if( check_bit( flags, LOGGER_CMD_LINE ) )
-	cout << *msg << "\n";
+	cout << *message << endl;
       
-      delete( msg );
-      queue_length--;
+      delete( message );
     }
-
-    write_lock.unlock();
+    
+    empty_lock.unlock();
   }
 }
 
 
-void ginLogger::delete_queue()
+void gin_logger::log( string file, int line, string log_type, string message )
 {
-  string *msg = NULL;
+  return_if_fail( check_bit( flags, LOGGER_RUNNING ) );
   
-  while( ( msg = ( string * )( g_async_queue_pop( log_queue ) ) ) )
-  {
-    delete( msg );
-    msg = NULL;
-  }
-}
-
-
-void ginLogger::log( string file, int line, string log_level, string message )
-{
-  if( !log_queue )
-    return;
+  time_t current_time = time( NULL );
+  struct tm *time_struct = localtime( &current_time );
   
-  time_t cur_time;
-  struct tm *time_struct;
-  
-  cur_time = time( NULL );
-  time_struct = localtime( &cur_time );
-  
-  string *msg;
-  
-  msg = new string( asctime( time_struct ) );
-  msg->append( log_level );
+  string *msg = new string( log_type );
   msg->append( "::" );
   msg->append( file );
   msg->append( "::" );
   msg->append( to_string(line ) );
   msg->append( "\n" );
+  msg->append( asctime( time_struct ) );
   msg->append( message );
-  
-  g_async_queue_push( log_queue, msg );
+ 
+  log_queue.push( msg );
 }
 
 
-flag8 ginLogger::get_flags()
+void gin_logger::pause()
 {
-  return flags;
+  empty_lock.lock();
+  set_bit( flags, LOGGER_RUNNING );
 }
 
 
-void ginLogger::pause()
+void gin_logger::resume()
 {
-  write_lock.lock();
-  set_bit( flags, LOGGER_PAUSED );
+  empty_lock.unlock();
+  remove_bit( flags, LOGGER_RUNNING );
 }
 
 
-void ginLogger::resume()
-{
-  write_lock.unlock();
-  remove_bit( flags, LOGGER_PAUSED );
-}
-
-
-void ginLogger::enable_cmd_line()
+void gin_logger::enable_cmd_line()
 {
   set_bit( flags, LOGGER_CMD_LINE );
 }
 
 
-void ginLogger::disable_cmd_line()
+void gin_logger::disable_cmd_line()
 {
   remove_bit( flags, LOGGER_CMD_LINE );
+}
+
+
+flag8 gin_logger::get_status()
+{
+  return flags;
+}
+
+
+string gin_logger::get_log_file()
+{
+  return log_file_name;
 }
 
 

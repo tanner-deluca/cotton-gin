@@ -1,53 +1,56 @@
-#include <iostream>
-#include <glib.h>
 #include <thread>
+#include <iostream>
 #include <bitset>
-#include <queue>
+#include <chrono>
 #include "gin_logger.h"
 
 
 using namespace std;
+  
+void thread1();
+void thread2();
+
+gin_logger *test_logger;
 
 
 int main()
 {
-  queue<string> q;
+  test_logger = new gin_logger( "test_file_1.txt", 10 );
   
-  q.push( "hi" );
-  cout << q.front() << "\n";
-  q.pop();
-  cout << q.front() << "\n";
-  /*
-  cout << "logger test\n";
+//   test_logger->enable_cmd_line();
+  test_logger->start();
   
-  ginLogger *logger = new ginLogger();
+  thread t1( thread1 );
+  thread t2( thread2 );
   
-  if( !logger->start() )
-    cout << "won't start without setting a log file\n";
+  t1.join();
+  t2.join();
   
-  logger->log( FILE_AND_LINE, LOG_INFO, "hi" );
+  delete( test_logger );
   
-  logger->set_log_file( "test_file1.txt" );
-  logger->set_log_file( "test_file2.txt" );
-  
-  logger->enable_cmd_line();
-  logger->pause();
-  
-  bitset<8> logger_flags1( logger->get_flags() );
-  cout << "logging flags after setting cmd line and pausing::" << logger_flags1 << "\n";
-  
-  logger->resume();
-  logger->disable_cmd_line();
-  bitset<8> logger_flags2( logger->get_flags() );
-  cout << "logging flags after removing cmd line and resuming::" << logger_flags2 << "\n";
-  
-  logger->enable_cmd_line();
-  
-  logger->start();
-     
-  this_thread::sleep_for( chrono::seconds( 1 ) );
-  cout << "done sleeping\n";
-  delete( logger );
-  */
   return 0;
-}  
+}
+
+
+void thread1()
+{
+  string msg;
+  
+  for( int i = 1000000; i > 0; i-- )
+  {
+    msg = "t1::" + to_string( i );
+    test_logger->log( __FILE__, __LINE__, "TEST", msg);
+  }
+}
+
+
+void thread2()
+{
+  string msg;
+  
+  for( int i = 1000000; i > 0; i-- )
+  {
+    msg = "t2::" + to_string( i );
+    test_logger->log( __FILE__, __LINE__, "TEST", msg);
+  }
+}
